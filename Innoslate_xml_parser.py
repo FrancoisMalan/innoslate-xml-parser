@@ -1,16 +1,15 @@
-# GPX_Converter copyright (c) 2014 by Francois Malan francois@francoismalan.com
-# Estimates mountain bike speed based on changes in elevation.
+# Innoslate XML parser copyright (c) 2014 by Francois Malan francois@scs-space.com
+# Extracts CSV files from the SKA SDP Innoslate project's exported XML
 
 import sys
-from xml.dom import minidom
 import csv
-
+from xml.dom import minidom
 from html.parser import HTMLParser
 
 ID_requirement = 'C1Z'
 ID_action = 'C1'
 
-ID_Status   = 'P3q6z'
+ID_Status = 'P3q6z'
 ID_Priority = 'Pjfa'
 
 #HTML stripping
@@ -20,10 +19,13 @@ class MLStripper(HTMLParser):
         super().__init__()
         self.reset()
         self.fed = []
+
     def handle_data(self, d):
         self.fed.append(d)
+
     def get_data(self):
         return ''.join(self.fed)
+
 
 def strip_tags(html):
     ''' 
@@ -32,12 +34,14 @@ def strip_tags(html):
     '''
     s = MLStripper()
     s.feed(html)
-    return s.get_data().strip().replace('\n\n','').replace('\t',' ')
+    return s.get_data().strip().replace('\n\n', '').replace('\t', ' ')
+
 #HTML stripping
 
 
 def usage():
-    print("usage: GPX_Converter source_file_name target_file_name")
+    print("usage: Innoslate_xml_parser source_file_name")
+
 
 class Requirement():
     id = ""
@@ -52,7 +56,9 @@ class Requirement():
         self.id = id
 
     def __repr__(self):
-        return 'Requirement. id=%s, number=%s, name=%s, labels=%s' % (self.id, self.number, self.name, str(len(self.labels)))
+        return 'Requirement. id=%s, number=%s, name=%s, labels=%s' % (
+            self.id, self.number, self.name, str(len(self.labels)))
+
 
 class Action():
     id = ""
@@ -67,6 +73,7 @@ class Action():
     def __repr__(self):
         return 'Action. id=%s, number=%s, name=%s, labels=%s' % (self.id, self.number, self.name, str(len(self.labels)))
 
+
 class Relationship():
     source = ""
     target = ""
@@ -78,6 +85,7 @@ class Relationship():
     def __repr__(self):
         return 'Relationship: %s -> %s' % (self.source, self.target)
 
+
 class Label():
     id = ""
     name = ""
@@ -87,12 +95,15 @@ class Label():
         self.id = id
 
     def __repr__(self):
-        return 'Label: %s' % (self.name)
+        return 'Label: %s' % self.name
+
 
 def parse_it(source_file_name):
-    xmlObj = minidom.parse(source_file_name)
-
-    types = set()
+    """
+    Parses the CSV file that was exported from Innoslate
+    @param source_file_name:
+    """
+    xml_obj = minidom.parse(source_file_name)
 
     requirements = {}
     actions = {}
@@ -102,8 +113,7 @@ def parse_it(source_file_name):
     relationships_from = {}
     relationships_to = {}
 
-    counter = 0
-    Topic = xmlObj.getElementsByTagName('entity')
+    Topic = xml_obj.getElementsByTagName('entity')
     for node in Topic:
         new_entity = None
         for child in node.childNodes:
@@ -137,7 +147,8 @@ def parse_it(source_file_name):
                         elif child.attributes['schemaAttributeId'].nodeValue == ID_Priority:
                             new_entity.priority = child.childNodes[1].childNodes[0].nodeValue
             else:
-                print("Warning - unrecognised entity with schema class '%s' encountered. Skipped it" % node.attributes['id'].nodeValue)
+                print("Warning - unrecognised entity with schema class '%s' encountered. Skipped it" %
+                      node.attributes['id'].nodeValue)
 
             entities[new_entity.id] = new_entity
             if isinstance(new_entity, Requirement):
@@ -145,7 +156,7 @@ def parse_it(source_file_name):
             elif isinstance(new_entity, Action):
                 actions[new_entity.id] = new_entity
 
-    Topic = xmlObj.getElementsByTagName('relationship')
+    Topic = xml_obj.getElementsByTagName('relationship')
     for node in Topic:
         relationship = Relationship()
         for child in node.childNodes:
@@ -167,7 +178,7 @@ def parse_it(source_file_name):
             relationships_from[relationship.source].append(relationship.target)
         relationships.append(relationship)
 
-    Topic = xmlObj.getElementsByTagName('label')
+    Topic = xml_obj.getElementsByTagName('label')
     labels = {}
     for node in Topic:
         id = node.attributes['id'].nodeValue
@@ -179,6 +190,19 @@ def parse_it(source_file_name):
                 label.description = child.childNodes[0].nodeValue
         labels[label.id] = label.name
 
+    return (requirements, actions, entities, relationships_from, relationships_to, labels)
+
+
+def write_requirements_csv(requirements, actions, entities, relationships_from, relationships_to, labels):
+    """
+    Writes the parsed requirements to CSV
+    @param requirements:
+    @param actions:
+    @param entities:
+    @param relationships_from:
+    @param relationships_to:
+    @param labels:
+    """
     with open('Requirements.csv', 'w', newline='') as fp:
         a = csv.writer(fp, delimiter=',')
         data = [['number', 'name', 'description', 'priority', 'status', 'labels', 'relationships with...']]
@@ -188,7 +212,8 @@ def parse_it(source_file_name):
             for label in requirement.labels:
                 labels_string += "%s, " % labels[label]
 
-            data_row = [requirement.number, requirement.name, strip_tags(requirement.description), requirement.priority, requirement.status, labels_string]
+            data_row = [requirement.number, requirement.name, strip_tags(requirement.description), requirement.priority,
+                        requirement.status, labels_string]
             if requirement.id in relationships_to:
                 for key in relationships_to[requirement.id]:
                     if key in actions:
@@ -200,6 +225,16 @@ def parse_it(source_file_name):
             data.append(data_row)
         a.writerows(data)
 
+
+def write_actions_csv(requirements, actions, entities, relationships_from, relationships_to):
+    """
+    Writes the parsed actions to CSV
+    @param requirements:
+    @param actions:
+    @param entities:
+    @param relationships_from:
+    @param relationships_to:
+    """
     with open('Actions.csv', 'w', newline='') as fp:
         a = csv.writer(fp, delimiter=',')
         data = [['number', 'name', 'relationships with...']]
@@ -217,9 +252,10 @@ def parse_it(source_file_name):
             data.append(data_row)
         a.writerows(data)
 
+
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         usage()
     else:
         source_file_name = sys.argv[1]
-        parse_it(source_file_name)
+        (requirements, actions, entities, relationships_from, relationships_to, labels) = parse_it(source_file_name)
