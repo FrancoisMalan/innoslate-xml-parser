@@ -5,11 +5,36 @@ import sys
 from xml.dom import minidom
 import csv
 
+from html.parser import HTMLParser
+
 ID_requirement = 'C1Z'
 ID_action = 'C1'
 
 ID_Status   = 'P3q6z'
 ID_Priority = 'Pjfa'
+
+#HTML stripping
+# developed from http://stackoverflow.com/questions/11061058/using-htmlparser-in-python-3-2
+class MLStripper(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.reset()
+        self.fed = []
+    def handle_data(self, d):
+        self.fed.append(d)
+    def get_data(self):
+        return ''.join(self.fed)
+
+def strip_tags(html):
+    ''' 
+       Function to strip tags and remove leading and trailing white
+       space and remove most of the paragraph gaps.
+    '''
+    s = MLStripper()
+    s.feed(html)
+    return s.get_data().strip().replace('\n\n','').replace('\t',' ')
+#HTML stripping
+
 
 def usage():
     print("usage: GPX_Converter source_file_name target_file_name")
@@ -163,7 +188,7 @@ def parse_it(source_file_name):
             for label in requirement.labels:
                 labels_string += "%s, " % labels[label]
 
-            data_row = [requirement.number, requirement.name, requirement.description, requirement.priority, requirement.status, labels_string]
+            data_row = [requirement.number, requirement.name, strip_tags(requirement.description), requirement.priority, requirement.status, labels_string]
             if requirement.id in relationships_to:
                 for key in relationships_to[requirement.id]:
                     if key in actions:
