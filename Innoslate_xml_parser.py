@@ -214,14 +214,17 @@ def write_requirements_csv(requirements, actions, entities, relationships_from, 
 
             data_row = [requirement.number, requirement.name, strip_tags(requirement.description), requirement.priority,
                         requirement.status, labels_string]
+
+            keys = set()
             if requirement.id in relationships_to:
                 for key in relationships_to[requirement.id]:
-                    if key in actions:
-                        data_row.append(entities[key].number)
+                    keys.add(key)
             if requirement.id in relationships_from:
                 for key in relationships_from[requirement.id]:
-                    if key in actions:
-                        data_row.append(entities[key].number)
+                    keys.add(key)
+            for key in keys:
+                if key in actions:
+                    data_row.append(entities[key].number + " : " + entities[key].name)
             data.append(data_row)
         a.writerows(data)
 
@@ -241,14 +244,16 @@ def write_actions_csv(requirements, actions, entities, relationships_from, relat
         for action in actions.values():
             assert isinstance(action, Action)
             data_row = [action.number, action.name]
+            keys = set()
             if action.id in relationships_to:
                 for key in relationships_to[action.id]:
-                    if key in requirements:
-                        data_row.append(entities[key].number)
+                    keys.add(key)
             if action.id in relationships_from:
                 for key in relationships_from[action.id]:
-                    if key in requirements:
-                        data_row.append(entities[key].number)
+                    keys.add(key)
+            for key in keys:
+                if key in requirements:
+                    data_row.append(entities[key].number + " : " + entities[key].name)
             data.append(data_row)
         a.writerows(data)
 
@@ -259,3 +264,5 @@ if __name__ == "__main__":
     else:
         source_file_name = sys.argv[1]
         (requirements, actions, entities, relationships_from, relationships_to, labels) = parse_it(source_file_name)
+        write_actions_csv(requirements, actions, entities, relationships_from, relationships_to)
+        write_requirements_csv(requirements, actions, entities, relationships_from, relationships_to, labels)
