@@ -9,8 +9,15 @@ from html.parser import HTMLParser
 ID_requirement = 'C1Z'
 ID_action = 'C1'
 
-ID_Status = 'P3q6z'
+ID_Status   = 'P3q6z'
 ID_Priority = 'Pjfa'
+
+ID_REL_Satisfies     = 'R4N'
+ID_REL_Satisfied_by  = 'R4M'
+ID_REL_Decomposes    = 'R30'
+ID_REL_Decomposed_by = 'R2Z'
+ID_REL_Sourced_by    = 'R4T'
+ID_REL_Receives_IO   = 'R44'
 
 #HTML stripping
 # developed from http://stackoverflow.com/questions/11061058/using-htmlparser-in-python-3-2
@@ -28,10 +35,10 @@ class MLStripper(HTMLParser):
 
 
 def strip_tags(html):
-    ''' 
+    """
        Function to strip tags and remove leading and trailing white
        space and remove most of the paragraph gaps.
-    '''
+    """
     s = MLStripper()
     s.feed(html)
     return s.get_data().strip().replace('\n\n', '').replace('\t', ' ')
@@ -109,10 +116,7 @@ def parse_it(source_file_name):
     actions = {}
     entities = {} # Requirements and actions
 
-    relationships = []
-    relationships_from = {}
-    relationships_to = {}
-
+    # Parse all Requirements and Actions (these are both represented by type 'entity')
     Topic = xml_obj.getElementsByTagName('entity')
     for node in Topic:
         new_entity = None
@@ -127,6 +131,7 @@ def parse_it(source_file_name):
                     id = node.attributes['id'].nodeValue
                     new_entity = Action(id)
                     break
+
         if new_entity is not None:
             if isinstance(new_entity, Requirement) or isinstance(new_entity, Action):
                 new_entity.labels = []
@@ -151,11 +156,36 @@ def parse_it(source_file_name):
                       node.attributes['id'].nodeValue)
 
             entities[new_entity.id] = new_entity
+
             if isinstance(new_entity, Requirement):
                 requirements[new_entity.id] = new_entity
             elif isinstance(new_entity, Action):
                 actions[new_entity.id] = new_entity
 
+    # Parse all Relationships Types from the schema; making sure that we understand them correctly
+    Topic = xml_obj.getElementsByTagName('schemaRelation')
+    relationhip_types = {}
+    for node in Topic:
+        id = node.attributes['id'].nodeValue
+        assert id not in relationhip_types
+        for child in node.childNodes:
+            if child.localName == 'name':
+                relationhip_types[id] = child.childNodes[0].nodeValue
+                break
+
+    recognized_relationship_types = {ID_REL_Satisfies,ID_REL_Satisfied_by, ID_REL_Decomposes,ID_REL_Decomposed_by,
+                                     ID_REL_Sourced_by,ID_REL_Receives_IO}
+    for t in recognized_relationship_types:
+        assert t in relationhip_types
+    assert relationhip_types[ID_REL_Satisfies]     == 'satisfies'
+    assert relationhip_types[ID_REL_Satisfied_by]  == 'satisfied by'
+    assert relationhip_types[ID_REL_Decomposes]    == 'decomposes'
+    assert relationhip_types[ID_REL_Decomposed_by] == 'decomposed by'
+    assert relationhip_types[ID_REL_Sourced_by]    == 'sourced by'
+    assert relationhip_types[ID_REL_Receives_IO]   == 'receives'
+
+    # Parse all Relationships
+    relationships_by_source = {}
     Topic = xml_obj.getElementsByTagName('relationship')
     for node in Topic:
         relationship = Relationship()
@@ -166,18 +196,14 @@ def parse_it(source_file_name):
                 relationship.target = child.childNodes[0].nodeValue
             elif child.localName == 'schemaRelationId':
                 relationship.reltype = child.childNodes[0].nodeValue
+                assert relationship.reltype in relationhip_types
 
-        if relationship.target not in relationships_to:
-            relationships_to[relationship.target] = [relationship.source]
+        if relationship.source not in relationships_by_source:
+            relationships_by_source[relationship.source] = [relationship]
         else:
-            relationships_to[relationship.target].append(relationship.source)
+            relationships_by_source[relationship.source].append(relationship)
 
-        if relationship.source not in relationships_from:
-            relationships_from[relationship.source] = [relationship.target]
-        else:
-            relationships_from[relationship.source].append(relationship.target)
-        relationships.append(relationship)
-
+    # Parse all Labels
     Topic = xml_obj.getElementsByTagName('label')
     labels = {}
     for node in Topic:
@@ -190,79 +216,78 @@ def parse_it(source_file_name):
                 label.description = child.childNodes[0].nodeValue
         labels[label.id] = label.name
 
-    return (requirements, actions, entities, relationships_from, relationships_to, labels)
+    return (requirements, actions, entities, relationhip_types, relationships_by_source, labels)
 
 
-def write_requirements_csv(requirements, actions, entities, relationships_from, relationships_to, labels):
+def write_requirements_csv(requirements, entities, relationships, labels):
     """
     Writes the parsed requirements to CSV
-    @param requirements:
-    @param actions:
-    @param entities:
-    @param relationships_from:
-    @param relationships_to:
-    @param labels:
     """
     with open('Requirements.csv', 'w', newline='') as fp:
         a = csv.writer(fp, delimiter=',')
-        data = [['number', 'name', 'description', 'priority', 'status', 'labels', 'relationships with...']]
+        data = [['Number', 'Name', 'Description', 'Priority', 'Status', 'Labels', 'Decomposes', 'Decomposed by',
+                 'Satisfied by']]
         for requirement in requirements.values():
             assert isinstance(requirement, Requirement)
             labels_string = ''
             for label in requirement.labels:
                 labels_string += "%s, " % labels[label]
 
-            data_row = [requirement.number, requirement.name, strip_tags(requirement.description), requirement.priority,
-                        requirement.status, labels_string]
+            decomposes_string = ''
+            decomposedby_string = ''
+            satisfiedby_string = ''
+            if requirement.id in relationships:
+                requirement_relationships = relationships[requirement.id]
+                for relationship in requirement_relationships:
+                    if relationship.target in entities:
+                        target_string = "%s %s, " % (entities[relationship.target].number, entities[relationship.target].name)
+                        if relationship.reltype == ID_REL_Decomposes:
+                            decomposes_string += target_string
+                        elif relationship.reltype == ID_REL_Decomposed_by:
+                            decomposedby_string += target_string
+                        elif relationship.reltype == ID_REL_Satisfied_by:
+                            satisfiedby_string += target_string
 
-            keys = set()
-            if requirement.id in relationships_to:
-                for key in relationships_to[requirement.id]:
-                    keys.add(key)
-            if requirement.id in relationships_from:
-                for key in relationships_from[requirement.id]:
-                    keys.add(key)
-            for key in keys:
-                if key in actions:
-                    data_row.append(entities[key].number + " : " + entities[key].name)
+            data_row = [requirement.number, requirement.name, strip_tags(requirement.description), requirement.priority,
+                        requirement.status, labels_string, decomposes_string, decomposedby_string, satisfiedby_string]
             data.append(data_row)
         a.writerows(data)
 
 
-def write_actions_csv(requirements, actions, entities, relationships_from, relationships_to):
+def write_actions_csv(actions, entities, relationships):
     """
     Writes the parsed actions to CSV
-    @param requirements:
-    @param actions:
-    @param entities:
-    @param relationships_from:
-    @param relationships_to:
     """
     with open('Actions.csv', 'w', newline='') as fp:
         a = csv.writer(fp, delimiter=',')
-        data = [['number', 'name', 'relationships with...']]
+        data = [['Number', 'Name', 'Decomposes', 'Decomposed by', 'Satisfies']]
         for action in actions.values():
             assert isinstance(action, Action)
-            data_row = [action.number, action.name]
-            keys = set()
-            if action.id in relationships_to:
-                for key in relationships_to[action.id]:
-                    keys.add(key)
-            if action.id in relationships_from:
-                for key in relationships_from[action.id]:
-                    keys.add(key)
-            for key in keys:
-                if key in requirements:
-                    data_row.append(entities[key].number + " : " + entities[key].name)
+
+            decomposes_string = ''
+            decomposedby_string = ''
+            satisfies_string = ''
+            if action.id in relationships:
+                relationships_of_this_action = relationships[action.id]
+                for relationship in relationships_of_this_action:
+                    if relationship.target in entities:
+                        target_string = "%s %s, " % (entities[relationship.target].number, entities[relationship.target].name)
+                        if relationship.reltype == ID_REL_Decomposes:
+                            decomposes_string += target_string
+                        elif relationship.reltype == ID_REL_Decomposed_by:
+                            decomposedby_string += target_string
+                        elif relationship.reltype == ID_REL_Satisfies:
+                            satisfies_string += target_string
+
+            data_row = [action.number, action.name, decomposes_string, decomposedby_string, satisfies_string]
             data.append(data_row)
         a.writerows(data)
-
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         usage()
     else:
         source_file_name = sys.argv[1]
-        (requirements, actions, entities, relationships_from, relationships_to, labels) = parse_it(source_file_name)
-        write_actions_csv(requirements, actions, entities, relationships_from, relationships_to)
-        write_requirements_csv(requirements, actions, entities, relationships_from, relationships_to, labels)
+        (requirements, actions, entities, relationhip_types, relationships, labels) = parse_it(source_file_name)
+        write_actions_csv(actions, entities, relationships)
+        write_requirements_csv(requirements, entities, relationships, labels)
