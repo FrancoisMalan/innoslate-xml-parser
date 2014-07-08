@@ -1,6 +1,8 @@
 # Innoslate XML parser copyright (c) 2014 by Francois Malan francois@scs-space.com
 # Extracts CSV files from the SKA SDP Innoslate project's exported XML
 
+# This script is written to be run in Python 2.x (Tested in 2.7)
+
 import sys
 import csv
 from xml.dom import minidom
