@@ -4,7 +4,7 @@
 import sys
 import csv
 from xml.dom import minidom
-from html.parser import HTMLParser
+from HTMLParser import HTMLParser
 
 ID_requirement = 'C1Z'
 ID_action = 'C1'
@@ -23,7 +23,6 @@ ID_REL_Receives_IO   = 'R44'
 # developed from http://stackoverflow.com/questions/11061058/using-htmlparser-in-python-3-2
 class MLStripper(HTMLParser):
     def __init__(self):
-        super().__init__()
         self.reset()
         self.fed = []
 
@@ -223,10 +222,12 @@ def write_requirements_csv(requirements, entities, relationships, labels):
     """
     Writes the parsed requirements to CSV
     """
-    with open('Requirements.csv', 'w', newline='') as fp:
-        a = csv.writer(fp, delimiter=',')
-        data = [['Number', 'Name', 'Description', 'Priority', 'Status', 'Labels', 'Decomposes', 'Decomposed by',
-                 'Satisfied by']]
+    with open('Requirements.csv', 'wb') as fp:
+        writer = csv.writer(fp, delimiter=',')
+        header_row = ['Number', 'Name', 'Description', 'Priority', 'Status', 'Labels', 'Decomposes', 'Decomposed by',
+                       'Satisfied by']
+        writer.writerow(header_row)
+
         for requirement in requirements.values():
             assert isinstance(requirement, Requirement)
             labels_string = ''
@@ -250,17 +251,16 @@ def write_requirements_csv(requirements, entities, relationships, labels):
 
             data_row = [requirement.number, requirement.name, strip_tags(requirement.description), requirement.priority,
                         requirement.status, labels_string, decomposes_string, decomposedby_string, satisfiedby_string]
-            data.append(data_row)
-        a.writerows(data)
-
+            writer.writerow([unicode(s).encode("utf-8") for s in data_row])
 
 def write_actions_csv(actions, entities, relationships):
     """
     Writes the parsed actions to CSV
     """
-    with open('Actions.csv', 'w', newline='') as fp:
-        a = csv.writer(fp, delimiter=',')
-        data = [['Number', 'Name', 'Decomposes', 'Decomposed by', 'Satisfies']]
+    with open('Actions.csv', 'wb') as fp:
+        writer = csv.writer(fp, delimiter=',')
+        header_row = ['Number', 'Name', 'Decomposes', 'Decomposed by', 'Satisfies']
+        writer.writerow(header_row)
         for action in actions.values():
             assert isinstance(action, Action)
 
@@ -280,8 +280,7 @@ def write_actions_csv(actions, entities, relationships):
                             satisfies_string += target_string
 
             data_row = [action.number, action.name, decomposes_string, decomposedby_string, satisfies_string]
-            data.append(data_row)
-        a.writerows(data)
+            writer.writerow([unicode(s).encode("utf-8") for s in data_row])
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
