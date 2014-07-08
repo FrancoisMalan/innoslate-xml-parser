@@ -284,6 +284,27 @@ def write_actions_csv(actions, entities, relationships):
             data_row = [action.number, action.name, decomposes_string, decomposedby_string, satisfies_string]
             writer.writerow([unicode(s).encode("utf-8") for s in data_row])
 
+def detect_and_write_duplicate_entities(entities, file_name):
+    """
+    Traverses the provided list of entities, lists all entities that don't have a unique 'number' field.
+    This field needs to be unique, as it corresponds to the entity's ID in Innoslate.
+    @param entities: a list or collection
+    @param file_name: the text file to which duplicated entities need to be written
+    """
+    entity_numbers = set()
+    duplicate_entity_numbers = set()
+    for entity in entities:
+        assert (isinstance(entity, Requirement) or isinstance(entity, Action))
+        if entity.number not in entity_numbers:
+            entity_numbers.add(entity.number)
+        else:
+            duplicate_entity_numbers.add(entity.number)
+
+        with open(file_name, 'wb') as duplicates_file:
+            duplicates_file.write('Number of duplicate entities = %d' % len(duplicate_entity_numbers))
+            for duplicate_number in duplicate_entity_numbers:
+                duplicates_file.write('\n%s' % duplicate_number)
+
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         usage()
@@ -292,3 +313,5 @@ if __name__ == "__main__":
         (requirements, actions, entities, relationhip_types, relationships, labels) = parse_it(source_file_name)
         write_actions_csv(actions, entities, relationships)
         write_requirements_csv(requirements, entities, relationships, labels)
+        detect_and_write_duplicate_entities(actions.values(), 'duplicate_actions.txt')
+        detect_and_write_duplicate_entities(requirements.values(), 'duplicate_requirements.txt')
